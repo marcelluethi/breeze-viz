@@ -1,7 +1,6 @@
 package breeze
 
 import java.awt.{Color, Stroke, Paint}
-import linalg.Matrix
 import org.jfree.chart.renderer.xy.XYItemRenderer
 import org.jfree.data.xy
 
@@ -25,8 +24,8 @@ package object plot {
                   lines : Boolean = true, shapes : Boolean = false,
                   labels : (Int) => String = null.asInstanceOf[Int=>String],
                   tips : (Int) => String = null.asInstanceOf[Int=>String] )
-                 (implicit xv: DomainFunction[X,Int,V],
-                  yv: DomainFunction[Y, Int, V], vv: V=>Double):Series = new Series {
+                 (implicit xv: DomainFunction1D[X,Int,V],
+                  yv: DomainFunction1D[Y, Int, V], vv: V=>Double):Series = new Series {
     require(xv.domain(x) == yv.domain(y), "Domains must match!")
 
     def getChartStuff(defaultName: (Int) => String, defaultColor: (Int) => Paint, defaultStroke: (Int) => Stroke): (xy.XYDataset, XYItemRenderer) = {
@@ -113,8 +112,8 @@ package object plot {
                          labels : Int=>String = null.asInstanceOf[Int=>String],
                          tips : Int=>String = null.asInstanceOf[Int=>String],
                          name : String = null)
-                        (implicit xv: DomainFunction[X,Int,V],
-                         yv: DomainFunction[Y, Int, V], vv: V=>Double):Series = new Series {
+                        (implicit xv: DomainFunction1D[X,Int,V],
+                         yv: DomainFunction1D[Y, Int, V], vv: V=>Double):Series = new Series {
     require(xv.domain(x) == yv.domain(y), "Domains must match!")
 
 
@@ -174,7 +173,7 @@ package object plot {
   /** Plots a histogram of the given data into the given number of bins */
 
   def hist[D,K,V](data : D, bins : HistogramBins = 10, name : String = null)
-                 (implicit xv: DomainFunction[D,Int,V], vv: V=>Double):Series = new Series {
+                 (implicit xv: DomainFunction1D[D,Int,V], vv: V=>Double):Series = new Series {
     val values = xv.domain(data).map(xv(data,_)).map(vv)
     val (min,max) = (values.min,values.max)
     val binner : StaticHistogramBins = bins match {
@@ -232,20 +231,17 @@ package object plot {
    * @param labels Labels for some subset of the data points
    * @param tips Tooltip popups for some subset of the data points
    */
-  def image[M,V]
-  (img : Matrix[Double],
+  def image[M, V]
+  (img : M,
    scale : GradientPaintScale[Double] = null,
    name : String = null,
    offset : (Int,Int) = (0,0),
    labels : PartialFunction[(Int,Int), String] = null.asInstanceOf[PartialFunction[(Int,Int), String]],
-   tips : PartialFunction[(Int,Int), String] = null.asInstanceOf[PartialFunction[(Int,Int), String]]):Series = new Series {
+   tips : PartialFunction[(Int,Int), String] = null.asInstanceOf[PartialFunction[(Int,Int), String]])
+  (implicit mToXYZ : DomainFunction2D[M, Int, V], vv :  V=>Double)
+  :Series = new Series {
 
-    val mt = img
-
-    val (minx,maxx) = (0,img.cols)
-    val (miny,maxy) = (0,img.rows)
-
-    val items = img.keysIterator.toIndexedSeq
+    val items = mToXYZ.domain(img)
 
     def getChartStuff(defaultName: (Int) => String, defaultColor: (Int) => Paint, defaultStroke: (Int) => Stroke): (xy.XYDataset, XYItemRenderer) = {
       // initialize dataset
@@ -254,7 +250,7 @@ package object plot {
         name = if (name == null) defaultName(0) else name,
         x = (k : (Int,Int)) => k._2 + offset._2,
         y = (k : (Int,Int)) => k._1 + offset._1,
-        z = (k : (Int,Int)) => mt(k._1,k._2),
+        z = (k : (Int,Int)) => vv(mToXYZ(img, (k._1,k._2))),
         label = (k : (Int,Int)) => if (labels != null && labels.isDefinedAt(k)) labels(k) else null,
         tip = (k : (Int,Int)) => if (tips != null && tips.isDefinedAt(k)) tips(k) else null
       )
@@ -286,7 +282,7 @@ package object plot {
 
       val staticScale = {
         if (scale == null)
-          GradientPaintScaleFactory[Double]().apply(mt.valuesIterator.toList).asInstanceOf[GradientPaintScale[Double]]
+          GradientPaintScaleFactory[Double]().apply(mToXYZ.valuesIterator(img).map(vv).toList).asInstanceOf[GradientPaintScale[Double]]
         else
           scale
       }
